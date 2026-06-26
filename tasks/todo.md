@@ -3,6 +3,10 @@
 Full phase checklist. Plan-first, verify-before-done, ruff-clean, push-every-phase.
 Check items off as they complete; add a review section at the end of each phase.
 
+> Per-pair task detail and sequencing live in [docs/GROUP_A_Om_Pranav.md](../docs/GROUP_A_Om_Pranav.md)
+> and [docs/GROUP_B_Venkatesh_Vamsi.md](../docs/GROUP_B_Venkatesh_Vamsi.md). The integration
+> contract (signatures, `interfaces.py`, severity values) is in [docs/TRD.md](../docs/TRD.md).
+
 ## Phase 0 — Scaffolding & governance
 - [x] Repo structure (`src/rawlog_triage/`, `tests/`, `data/`, `eval/`, `tasks/`, `docs/`, `scripts/`)
 - [x] Source stubs: `__init__`, `schema`, `ingest`, `triage`, `emit`, `cli`
@@ -14,49 +18,53 @@ Check items off as they complete; add a review section at the end of each phase.
 - [x] Smoke test green; `ruff check .` + `ruff format --check .` clean
 - [x] Commit + push to `origin/main`
 
-## Phase 1 — Schema
-- [ ] Define `TriageResult` Pydantic v2 model (4 fields exactly)
-- [ ] Define `error_severity` enum (CRITICAL/FATAL/ERROR/WARNING/INFO)
-- [ ] Export JSON schema for Ollama `format=`
+## Phase 1 — Schema & contract
+- [ ] Define `TriageResult` Pydantic v2 model (4 fields exactly) in `schema.py` — **Group A publishes FIRST**
+- [ ] Severity values `INFO`/`WARNING`/`ERROR`/`FATAL`; add `Field(description=...)` to every field
+- [ ] Agree `ingest()`/`triage()`/`emit()` signatures in `interfaces.py` (per docs/TRD.md)
+- [ ] Export JSON schema for Ollama (`TriageResult.model_json_schema()`)
 - [ ] Unit tests: valid payload passes, extra/missing field fails, bad enum fails
+- [ ] **Tooling migration (Group B):** `uv` env/deps + `pre-commit` framework + CI — replaces Phase-0 pip/venv + native hook
 - [ ] ruff clean · pytest green · commit + push
 
-## Phase 2 — Ingestion
-- [ ] `ingest.read(source)` — file path or stdin → normalized log text
-- [ ] Handle empty input / missing file with clear errors
-- [ ] Unit tests with `data/sample.log` + stdin
+## Phase 2 — Ingestion + pre-filter (Group B)
+- [ ] `ingest(path) -> list[str]`: read with `errors="replace"`, chunk, pre-filter benign INFO/DEBUG (stdlib `re`)
+- [ ] Handle empty input / missing file with clear errors; keep memory flat on large files
+- [ ] Add a ~500KB Loghub sample → `data/sample_production_logs.txt`
+- [ ] Unit tests with the sample + stdin
 - [ ] ruff clean · pytest green · commit + push
 
-## Phase 3 — Triage
+## Phase 3 — Triage (Group A)
 - [ ] `ollama pull gemma3:4b` (prerequisite)
-- [ ] `triage.run(log_text, model)` → Ollama call, `temperature=0`, `format=schema`
-- [ ] Parse + validate response into `TriageResult`
-- [ ] Prompt that instructs isolation of the single fatal/anomalous line
-- [ ] Tests (mock Ollama client) for parse/validate paths
+- [ ] `triage(chunk) -> TriageResult | None` via `ollama.chat(..., format=TriageResult.model_json_schema(), options={"temperature": 0})`
+- [ ] Return `None` when there is no real error (do NOT fabricate); bounded 1-retry on `ValidationError`, then a typed "unparseable" result
+- [ ] System prompt that isolates the single most severe anomalous/fatal event
+- [ ] Tests (mock Ollama client) for parse / validate / None paths
 - [ ] ruff clean · pytest green · commit + push
 
-## Phase 4 — Orchestration
-- [ ] `emit.to_json(result)` → exact 4-field JSON string
-- [ ] `cli.main()` wires ingest → triage → emit, arg parsing, exit codes
-- [ ] End-to-end run on `data/sample.log`
+## Phase 4 — Orchestration + emit (Group B)
+- [ ] `emit(result, target="-")`: `"-"` → stdout; a path → write file; `http(s)://…` → POST
+- [ ] `cli.py` wires ingest → triage → emit, arg parsing, exit codes
+- [ ] End-to-end run on `data/sample_production_logs.txt`
 - [ ] ruff clean · pytest green · commit + push
 
-## Phase 5 — Hardening
+## Phase 5 — Hardening (Group B)
 - [ ] Validation-failure path: non-zero exit, clear stderr, never malformed stdout JSON
+- [ ] Edge cases: empty file · no-error file (→ `None`, no fabrication) · truncated/garbled lines · multiple fatals (report the FIRST) · non-UTF-8 bytes · huge file
 - [ ] Ollama-unavailable / model-missing handling
-- [ ] Timeouts / large-input handling
-- [ ] Tests for failure modes
+- [ ] Run on an unseen organizer sample; fix whatever breaks
 - [ ] ruff clean · pytest green · commit + push
 
-## Phase 6 — Eval
-- [ ] Curate `eval/` cases (raw log → expected isolated line + fields)
-- [ ] Eval harness measuring isolation correctness + validity rate
-- [ ] Compare `gemma3:4b` vs `gemma3:12b`
+## Phase 6 — Eval (Group A)
+- [ ] `eval/golden.jsonl`: 10–20 hand-labelled Loghub lines (expected severity + key fields)
+- [ ] `eval/run_eval.py` reports JSON-valid %, correct-line %, severity accuracy (the demo slide)
+- [ ] Compare `gemma3:4b` vs `gemma3:12b` on the golden set (if time allows)
 - [ ] Record results · ruff clean · pytest green · commit + push
 
 ## Phase 7 — Demo
-- [ ] Demo script / README usage walkthrough
+- [ ] Demo script / README usage walkthrough (one command, end-to-end)
 - [ ] Sample webhook POST example
+- [ ] Lock a submittable version ~2 hrs before close; then polish metrics + demo
 - [ ] Final pass: ruff clean · pytest green · commit + push
 
 ---
@@ -69,7 +77,7 @@ Check items off as they complete; add a review section at the end of each phase.
   `tests/`, `data/` (with `sample.log`), `eval/`, `tasks/`, `docs/`, `scripts/`.
 - Governance: `CLAUDE.md` (rules + workflow), `docs/PRD.md` (exact 4-field contract),
   `docs/TRD.md` (stack + ingest→triage→emit contract), `tasks/todo.md` (this checklist),
-  `docs/lessons.md` (empty), `docs/instructions.md`, plus a short `README.md`.
+  `docs/lessons.md`, `docs/instructions.md`, plus a short `README.md`.
 - Tooling: `pyproject.toml` (deps `pydantic`,`ollama`; dev `ruff`,`pytest`; ruff + pytest
   config; hatchling src layout; `rawlog-triage` console script), `Makefile`,
   `scripts/*.ps1`, and a native pre-commit hook (`scripts/hooks/pre-commit` via
@@ -89,7 +97,14 @@ Check items off as they complete; add a review section at the end of each phase.
 - `requires-python = ">=3.12"`; dev machine runs Python 3.13.7 (compatible).
 - `.claude/` gitignored (session-generated agent config, not a deliverable).
 
+**Post-Phase-0 docs update (team governance):**
+- Promoted the team operating manual to root `CLAUDE.md` (Group A/B ownership, agent-tool
+  usage, guards); removed the duplicate `docs/CLAUDE.md` so it auto-loads.
+- Added `docs/GROUP_A_Om_Pranav.md` and `docs/GROUP_B_Venkatesh_Vamsi.md`; expanded PRD/TRD/lessons.
+- Tooling target moved to `uv` + `pre-commit` framework + CI + branch-per-phase, but the
+  working pip/venv + native-hook scaffold is kept; **migration tracked as a Phase-1 Group-B task** above.
+
 **Deferred / next:**
 - **Before Phase 3 (triage): `ollama pull gemma3:4b`** — not yet pulled locally
   (only `gemma2:2b`, `qwen2.5:14b`, `llama3.2:3b`, `nomic-embed-text` are present).
-- Phase 1 = define the `TriageResult` Pydantic model + `error_severity` enum.
+- Phase 1 = publish `schema.py` (`TriageResult`) + agree `interfaces.py` signatures.

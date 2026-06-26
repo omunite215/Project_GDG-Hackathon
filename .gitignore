@@ -24,3 +24,6 @@ Thumbs.db
 
 # Local agent / tooling config
 .claude/
+
+# graphify knowledge-graph artifacts (regenerated per machine; large, embed file contents)
+graphify-out/

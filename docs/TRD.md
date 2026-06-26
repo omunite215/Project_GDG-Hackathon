@@ -1,57 +1,56 @@
-# TRD — RawLog Triage Pipeline
+# TRD.md — RawLog Triage Pipeline
 
-## Stack
-| Concern | Choice | Notes |
-|---|---|---|
-| Language | Python ≥3.12 | `requires-python = ">=3.12"`. Dev machine runs 3.13.7 (compatible). |
-| LLM runtime | Ollama (local) | No data leaves the machine. |
-| Model (dev) | `gemma3:4b` | Fast iteration. **Run `ollama pull gemma3:4b` first** — not yet pulled. |
-| Model (quality) | `gemma3:12b` | Higher-quality pass; `ollama pull gemma3:12b`. |
-| Validation | Pydantic v2 | `schema.py` model is the source of truth. |
-| Structured output | Ollama `format=<json schema>` + `temperature=0` | Deterministic, schema-constrained generation via the `ollama` Python client. |
-| Lint/format | ruff | Must be clean before every commit (pre-commit hook). |
-| Tests | pytest | `pythonpath=["src"]`, smoke test in Phase 0. |
+## Stack (verified current, Jun 2026)
+- **Python 3.12**, managed with **uv**.
+- **Ollama** (v0.30.x) serving Gemma locally. The GPU is used automatically for inference.
+- **Models:** `gemma3:4b` = dev default (instant on this hardware, ideal for prompt iteration). `gemma3:12b` = optional quality upgrade (~8–9 GB at Q4; if the GPU is the 8 GB laptop part it spills to the 64 GB system RAM and runs slower — only switch if 4B accuracy is short and the latency budget allows). **Stay in the Gemma family — this is a Gemma-powered event.**
+- **Pydantic v2** for schema + validation.
+- **typer** (or stdlib `argparse`) for the CLI. `requests` only if doing the optional webhook POST.
+- Dev: **pytest**, **ruff** (check + format), **pre-commit**.
+- No LangChain, no DB. (ponytail: add a dependency only when a few lines can't do the job.)
 
-> Note: only `gemma2:2b`, `qwen2.5:14b`, `llama3.2:3b`, `nomic-embed-text` are pulled
-> locally today. `gemma2:2b` can serve as a stopgap for early triage smoke tests, but the
-> committed default is `gemma3:4b`.
+## The key technique: Ollama structured outputs
+Pass the Pydantic JSON schema to Ollama's `format` parameter with **temperature 0**. Ollama applies **constrained decoding**, so the model literally cannot emit a token that breaks the schema — no code fences, no conversational filler, no invalid JSON — and it's markedly faster than free-form generation. This is how we hit "100% valid JSON" with no regex-repair stage. A bounded validate-and-retry (max 1–2 tries, then return a typed "unparseable" record) is the only fallback we need.
 
-## Architecture: `ingest → triage → emit`
-A linear three-stage pipeline orchestrated by the CLI. Each stage is a module under
-`src/rawlog_triage/`.
+Best practices: `temperature=0`; add `Field(description=...)` to every field (the description ships in the schema and measurably improves extraction); keep the schema **flat** (ours is — 4 fields, no nesting, which also avoids the one failure mode where small quantized models return empty arrays on deeply nested schemas).
 
+## Architecture (linear pipeline)
 ```
-stdin / file path
-      │
-      ▼
-  ingest.py   ──►  normalized raw log text (str)
-      │
-      ▼
-  triage.py   ──►  TriageResult (validated Pydantic model)
-      │            (Ollama call: gemma3, temperature=0, format=schema)
-      ▼
-  emit.py     ──►  JSON string (the EXACT 4-field object) → stdout / webhook
+ingest(path) -> list[str]              # Group B: read file, chunk, pre-filter benign noise
+   -> triage(chunk) -> TriageResult?   # Group A: Gemma structured-output call
+       -> emit(result) -> None         # Group B: JSON to stdout/file (optional webhook POST)
+```
+Orchestrated by `cli.py` (Group B).
+
+**Pre-filter rationale (Group B):** drop obviously-benign INFO/DEBUG lines with cheap regex BEFORE the model, so tokens are spent only on candidate anomaly lines. This is the bandwidth win on a 500KB dump.
+
+## The integration contract
+Both groups code to this. **Do not change it without telling the other pair.**
+
+```python
+# src/rawlog_triage/schema.py   (owned by Group A — publish FIRST)
+from pydantic import BaseModel, Field
+from typing import Literal
+
+Severity = Literal["INFO", "WARNING", "ERROR", "FATAL"]
+
+class TriageResult(BaseModel):
+    service_name: str = Field(description="Service/component that emitted the failing line")
+    timestamp: str = Field(description="ISO-8601 timestamp of the event, or '' if none present")
+    error_severity: Severity
+    suggested_remediation: str = Field(description="One concrete next step to investigate/fix")
 ```
 
-### Module contract
-| Module | Responsibility | Input | Output |
-|---|---|---|---|
-| `schema.py` | Define `TriageResult` (4 fields) + `error_severity` enum. Provides the JSON schema for Ollama. | — | Pydantic model / JSON schema |
-| `ingest.py` | Read & normalize raw logs. No interpretation. | file path or stdin | `str` (raw log text) |
-| `triage.py` | Call Ollama to isolate the fatal line and fill the model. | raw log text `str`, model name | `TriageResult` |
-| `emit.py` | Serialize the validated model to the 4-field JSON. | `TriageResult` | JSON `str` (and/or webhook POST) |
-| `cli.py` | Parse args, wire `ingest → triage → emit`, handle exit codes. | argv | process exit code |
+```python
+# src/rawlog_triage/interfaces.py   (signatures only — the seam between the two pairs)
+# ingest(path: str) -> list[str]
+# triage(chunk: str) -> TriageResult | None      # None when no anomaly present (do NOT fabricate)
+# emit(result: TriageResult, target: str = "-") -> None
+#     target: "-" = stdout ; a filesystem path = write file ; "http(s)://..." = POST
+```
 
-### Determinism & validation rules
-- Every Ollama call sets `temperature=0` and passes the schema via `format=`.
-- The model output is parsed back through Pydantic; validation failure ⇒ non-zero exit
-  with a clear message, **never** malformed JSON on stdout.
-- `emit.py` writes exactly one JSON object — the 4 fields, nothing else.
+## Evaluation (`eval/run_eval.py` — Group A)
+Golden set = 10–20 known-bad lines from Loghub HDFS/Linux, hand-labelled. Report three numbers: **JSON-valid rate** (~100% expected), **correct-line localization**, **severity accuracy**. This is both the regression guard and the demo slide.
 
-## Repo layout
-`src/` layout, installed editable (`pip install -e .[dev]`). Package `rawlog_triage`
-exposes a `rawlog-triage` console script (`cli:main`). Tests in `tests/`, sample logs in
-`data/`, eval cases in `eval/`.
-
-## Out of scope (this is a TRD, not a roadmap)
-Streaming/tailing, log persistence, multiple simultaneous incidents, non-Ollama backends.
+## Edge cases to harden (Group B harness)
+empty file · file with no error (→ `None`, no hallucination) · truncated/garbled lines · multiple fatals (**policy: report the FIRST fatal**, document it) · non-UTF-8 bytes (read with `errors="replace"`) · huge file (chunking keeps memory flat).

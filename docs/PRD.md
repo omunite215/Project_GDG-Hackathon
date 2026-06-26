@@ -1,59 +1,38 @@
-# PRD — RawLog Triage Pipeline
+# PRD.md — RawLog Triage Pipeline
 
 ## Problem
-On-call and ops engineers face walls of raw log output when something breaks. The
-single fatal/anomalous line that explains the incident is buried among hundreds of
-benign INFO/DEBUG lines. Manually finding it and turning it into a structured,
-actionable alert is slow and inconsistent.
-
-## Solution
-A small Python utility that takes a raw log blob, uses a **local** Gemma model (via
-Ollama — no data leaves the machine) to isolate the single most anomalous/fatal line,
-and emits a structured, schema-validated JSON object that can be POSTed straight to a
-webhook (Slack, PagerDuty, an incident bot, etc.).
+Production systems emit gigabytes of unstructured logs. Finding the one line that actually failed means manual regex spelunking and filtering. We automate the triage: raw log in, one structured incident record out.
 
 ## Users
-- On-call / SRE / ops engineers triaging an incident.
-- Automated alerting glue that needs structured input rather than raw text.
+- **The on-call engineer** who needs the failing event extracted and explained, fast.
+- **The downstream system** (webhook → DB / alerting) that needs clean, valid JSON it can ingest without parsing surprises.
+
+## Core requirement (the deliverable)
+A local CLI/script that reads a raw log text stream and returns **one** syntactically perfect, schema-validated JSON object:
+
+| field | type | notes |
+|---|---|---|
+| `service_name` | string | service/component that emitted the failing line |
+| `timestamp` | string | ISO-8601, or `""` if none present |
+| `error_severity` | enum | `INFO` \| `WARNING` \| `ERROR` \| `FATAL` |
+| `suggested_remediation` | string | one concrete next step to investigate/fix |
+
+Output is ready for webhook injection (POST) or write-to-file.
 
 ## Inputs
-- Raw, multi-line log text, supplied either as a **file path** or piped via **stdin**.
-- No assumption about log format; the model reasons over plain text.
+Raw logs from the **Loghub** repo (HDFS or Linux folder), a ~500KB sample saved as `data/sample_production_logs.txt`. Organizers may hand unseen samples during the hardening window.
 
-## Output — the EXACT contract (4 fields, no more, no fewer)
-A single JSON object:
+## Success criteria (this is also the demo)
+1. **Valid JSON 100% of the time** (guaranteed by constrained decoding).
+2. Correctly **isolates the anomalous/fatal line** on the golden set.
+3. Correct **severity** + a plausible **remediation**.
+4. **Handles edge cases without crashing or hallucinating:** empty file; file with NO error (returns nothing — must not invent one); truncated lines; multiple errors; non-UTF-8 bytes.
+5. Runs **end-to-end on one command** in front of judges.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `service_name` | string | The service/component the fatal line came from (e.g. `auth-service`). |
-| `timestamp` | string | The timestamp of the isolated fatal line, as it appears in the log. |
-| `error_severity` | string (enum) | One of: `CRITICAL`, `FATAL`, `ERROR`, `WARNING`, `INFO`. |
-| `suggested_remediation` | string | A concise, actionable next step to resolve the issue. |
+## Scope / non-goals
+- **NO** model training / fine-tuning. Inference only.
+- **NO** database. **NO** web UI.
+- The "PR creator / merger" framing from the original notes belongs to a *different* track — **out of scope** unless organizers say otherwise. (If they do: stretch goal = POST the triage JSON as a structured comment to a webhook/Slack.)
 
-Example:
-```json
-{
-  "service_name": "auth-service",
-  "timestamp": "2026-06-26T11:40:12Z",
-  "error_severity": "FATAL",
-  "suggested_remediation": "Increase the DB connection pool size or fix the connection leak; restart auth-service."
-}
-```
-
-This object is defined by the Pydantic model in `src/rawlog_triage/schema.py`, which is
-also the JSON schema given to Ollama via `format=`. The enum values are finalized in the
-schema phase.
-
-## Success criteria
-1. **Always valid:** 100% of runs emit JSON that validates against the schema (4 fields,
-   correct types, valid enum) — or exit non-zero with a clear error, never malformed JSON.
-2. **Correct isolation:** On the eval set (`eval/`), the pipeline identifies the intended
-   fatal/anomalous line.
-3. **Deterministic:** Same input + same model ⇒ same output (`temperature=0`).
-4. **Local & fast:** Runs entirely on a local Ollama model; `gemma3:4b` is the dev default.
-5. **Webhook-ready:** Output is a single JSON object on stdout, directly POST-able.
-
-## Non-goals
-- No multi-line incident summaries (one fatal line → one object).
-- No log storage, indexing, or streaming/tailing.
-- No cloud LLM calls.
+## Timeline
+Event is **today, Jun 26, 9:00 AM–7:00 PM EDT**, in person at Curry Student Center, Northeastern. Real build time ≈ 6–7 hrs. **Lock a submittable end-to-end version ~2 hours before close**, then spend remaining time on golden-set metrics and demo polish — not new features.
