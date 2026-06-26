@@ -23,6 +23,7 @@ triage-logs data/sample.log
 - [docs/PRD.md](docs/PRD.md) — problem, inputs, the exact 4-field output contract
 - [docs/TRD.md](docs/TRD.md) — stack and the `ingest → triage → emit` contract
 - [docs/instructions.md](docs/instructions.md) — setup / lint / test / run
+- [docs/TESTING.md](docs/TESTING.md) — how to test (unit, live, eval, edge cases, troubleshooting)
 - [tasks/todo.md](tasks/todo.md) — phase checklist
 - [CLAUDE.md](CLAUDE.md) — project rules & workflow
 
