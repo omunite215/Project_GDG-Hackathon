@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from rawlog_triage.emit import emit
-from rawlog_triage.ingest import ingest
+from rawlog_triage.ingest import ingest, select_candidate
 from rawlog_triage.triage import triage
 
 # Exit codes: 0 ok (incident or clean no-op); 2 bad input (unreadable file);
@@ -43,14 +43,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"triage-logs: cannot read {args.input!r}: {exc}", file=sys.stderr)
         return EXIT_INPUT
 
-    if not chunks:
+    # Cheap O(N) pass picks the single most-severe candidate line, so the model is
+    # called exactly once regardless of log size (and the earliest FATAL anywhere in
+    # the file is found, not just in the first chunk).
+    candidate = select_candidate(chunks)
+    if candidate is None:
         return EXIT_OK
 
-    # MVP: triage the first candidate chunk (the earliest events); the model
-    # isolates the single most severe/first event within it. Selecting a fatal
-    # that lands in a later chunk is a known limitation (see tasks/todo.md).
     try:
-        result = triage(chunks[0], model=args.model)
+        result = triage(candidate, model=args.model)
     except Exception as exc:  # Ollama unavailable, model missing, etc.
         print(f"triage-logs: triage failed: {exc}", file=sys.stderr)
         return EXIT_RUNTIME

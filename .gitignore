@@ -27,3 +27,6 @@ Thumbs.db
 
 # graphify knowledge-graph artifacts (regenerated per machine; large, embed file contents)
 graphify-out/
+
+# LogHub raw 2k CSVs (fetched by eval/fetch_loghub.py; the derived golden_loghub.jsonl is committed)
+eval/loghub/

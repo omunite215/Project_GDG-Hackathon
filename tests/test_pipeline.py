@@ -3,7 +3,7 @@ import json
 from rawlog_triage import cli
 from rawlog_triage.cli import EXIT_INPUT, EXIT_OK, EXIT_RUNTIME, main
 from rawlog_triage.emit import emit
-from rawlog_triage.ingest import CHUNK_MAX_CHARS, ingest
+from rawlog_triage.ingest import CHUNK_MAX_CHARS, ingest, select_candidate
 from rawlog_triage.schema import TriageResult
 
 # --- ingest: pre-filter + edge cases ---------------------------------------
@@ -75,6 +75,29 @@ def test_ingest_chunks_large_file_keeping_memory_bounded(tmp_path) -> None:
     assert len(chunks) > 1  # proves the buffer flushed before EOF
     assert all(len(c) <= CHUNK_MAX_CHARS + 64 for c in chunks)  # each stays bounded
     assert sum(c.count("\n") + 1 for c in chunks) == 400  # no lines lost
+
+
+# --- select_candidate: one cheap pass picks the precise line for the model -----
+
+
+def test_select_candidate_picks_earliest_fatal() -> None:
+    chunks = ["WARN slow disk\nERROR write failed\nFATAL alpha oom\nFATAL beta panic"]
+    assert select_candidate(chunks) == "FATAL alpha oom"
+
+
+def test_select_candidate_outranks_warning_with_error() -> None:
+    chunks = ["WARN cache miss", "something happened\nERROR db connection refused"]
+    assert select_candidate(chunks) == "ERROR db connection refused"
+
+
+def test_select_candidate_recall_fallback_to_first_line() -> None:
+    # No severity keyword anywhere -> still hand the first candidate to the model (recall).
+    chunks = ["just a weird truncated line\nanother odd line"]
+    assert select_candidate(chunks) == "just a weird truncated line"
+
+
+def test_select_candidate_none_when_empty() -> None:
+    assert select_candidate([]) is None
 
 
 # --- emit -------------------------------------------------------------------

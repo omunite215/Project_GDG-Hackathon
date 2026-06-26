@@ -20,10 +20,28 @@ from rawlog_triage.schema import TriageResult
 DEFAULT_MODEL = "gemma3:4b"
 
 SYSTEM_PROMPT = (
-    "You are a log triage engine. Given a log excerpt, identify the single most severe "
-    "anomalous or fatal event and fill the schema. If the excerpt shows only benign, normal "
-    "activity, set error_severity to INFO. Use the timestamp from the chosen line, or '' if "
-    "none is present. Be specific and concise in suggested_remediation."
+    "You are a log triage engine. You are given one or a few raw log lines. Identify the "
+    "single most severe event and fill the schema.\n\n"
+    "Set error_severity by mapping the line's own level token (a word OR a single letter, "
+    "usually near the start of the line) to exactly one of INFO, WARNING, ERROR, FATAL:\n"
+    "- FATAL: fatal, critical, crit, panic, emerg/emergency, alert, or 'F'. A crash or outage "
+    "that stops the service.\n"
+    "- ERROR: error, err, severe, exception, failed/failure, or 'E'. An operation failed but "
+    "the service keeps running.\n"
+    "- WARNING: warn, warning, or 'W'. A concerning but non-failing condition.\n"
+    "- INFO: info, notice, debug, trace, verbose, config, fine, or 'I'/'D'/'V'. Normal, "
+    "benign activity.\n"
+    "CRITICAL: severity comes ONLY from the line's level token, never from severity-sounding "
+    "words later in the message. If the line begins with a level token (e.g. Info, I, W, E, "
+    "WARN, ERROR, FATAL), use THAT token and ignore words like 'failed', 'warning', 'error', "
+    "or 'exception' in the message body. Example: 'Info CBS: Failed to get next element' -> "
+    "INFO, because the level is Info. A line whose level is 'E' is ERROR even if its message "
+    "looks mild. Infer from the message only when the line has no level token at all. If the "
+    "excerpt is entirely normal/benign activity, set error_severity to INFO.\n\n"
+    "service_name = the service/component that emitted the line. "
+    "timestamp = the timestamp on that line, or '' if none is present. "
+    "suggested_remediation = one concise concrete next step (for INFO, a brief "
+    "'no action needed' note)."
 )
 
 
@@ -65,7 +83,8 @@ def triage(chunk: str, model: str = DEFAULT_MODEL) -> TriageResult | None:
                 {"role": "user", "content": chunk},
             ],
             format=TriageResult.model_json_schema(),
-            options={"temperature": 0},
+            # Greedy + seeded: temperature alone isn't fully deterministic in Ollama.
+            options={"temperature": 0, "top_k": 1, "seed": 0},
         )
         try:
             result = TriageResult.model_validate_json(response["message"]["content"])

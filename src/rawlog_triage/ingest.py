@@ -48,3 +48,45 @@ def ingest(path: str) -> list[str]:
     if buffer:
         chunks.append("\n".join(buffer))
     return chunks
+
+
+# Severity-keyword ranks for cheap, deterministic candidate selection (rank 1 = none).
+_SEVERITY_PATTERNS = [
+    (4, re.compile(r"\b(FATAL|PANIC|EMERG(?:ENCY)?|CRIT(?:ICAL)?|ALERT)\b", re.IGNORECASE)),
+    (3, re.compile(r"\b(ERROR|ERR|SEVERE|EXCEPTION|FAIL(?:ED|URE)?|TRACEBACK)\b", re.IGNORECASE)),
+    (2, re.compile(r"\b(WARN(?:ING)?)\b", re.IGNORECASE)),
+]
+
+
+def _rank(line: str) -> int:
+    for rank, pattern in _SEVERITY_PATTERNS:
+        if pattern.search(line):
+            return rank
+    return 1
+
+
+def select_candidate(chunks: list[str]) -> str | None:
+    """Pick the single most-severe candidate line for triage — one O(N) pass, no model.
+
+    Keeps the model cost at exactly one call regardless of log size: scan the pre-filtered
+    candidates, return the *earliest* line at the highest severity rank (FATAL > ERROR > WARN),
+    short-circuiting on the first FATAL. With no severity keyword, fall back to the first
+    candidate line (recall: a keyword-less anomaly still reaches the model, which may return
+    None). Returns None only when there are no candidate lines.
+    """
+    best_line: str | None = None
+    best_rank = 0
+    first_line: str | None = None
+    for chunk in chunks:
+        for raw in chunk.split("\n"):
+            line = raw.strip()
+            if not line:
+                continue
+            if first_line is None:
+                first_line = line
+            rank = _rank(line)
+            if rank > best_rank:
+                best_rank, best_line = rank, line
+                if rank == 4:  # FATAL — earliest one wins; nothing can outrank it
+                    return best_line
+    return best_line if best_rank >= 2 else first_line
