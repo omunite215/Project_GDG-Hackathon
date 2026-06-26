@@ -1,9 +1,10 @@
 """Read raw logs and pre-filter likely-benign lines before triage.
 
-Streaming, recall-first pre-filter: iterate the file line-by-line and drop only
+Streaming, recall-first pre-filter: iterate the source line-by-line and drop only
 the obvious high-volume noise (blank lines, replacement-char garbage, and
 INFO/DEBUG/TRACE/NOTICE-prefixed lines). Everything else is kept as a candidate
-and buffered into bounded chunks, so memory stays flat on huge files.
+and buffered into bounded chunks, so memory stays flat on huge files. The path
+"-" reads stdin instead of a file.
 
 # ponytail: recall-first is deliberate. triage() is the precise filter and must
 # return None on a benign chunk (TRD "no fabrication"); ingest only strips the
@@ -13,20 +14,40 @@ and buffered into bounded chunks, so memory stays flat on huge files.
 
 from __future__ import annotations
 
+import io
 import re
+import sys
+from contextlib import nullcontext
 
 CHUNK_MAX_CHARS = 2000
 
 BENIGN_PREFIX_RE = re.compile(r"^\s*(INFO|DEBUG|TRACE|NOTICE)\b", re.IGNORECASE)
 
 
+def _open_source(path: str):
+    """Context manager yielding a text line iterator for a file path or '-' (stdin).
+
+    Decodes with errors="replace" so non-UTF-8 bytes never crash ingestion, and
+    streams line-by-line (memory stays flat) for both files and piped input.
+    """
+    if path != "-":
+        return open(path, encoding="utf-8", errors="replace")
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is not None:  # real stdin: decode its bytes the same way as a file
+        return nullcontext(io.TextIOWrapper(buffer, encoding="utf-8", errors="replace"))
+    return nullcontext(sys.stdin)  # already-text stream (e.g. a test's StringIO)
+
+
 def ingest(path: str) -> list[str]:
-    """Return ordered candidate log chunks (benign noise dropped) for triage."""
+    """Return ordered candidate log chunks (benign noise dropped) for triage.
+
+    `path` is a file path, or "-" to read from stdin.
+    """
     chunks: list[str] = []
     buffer: list[str] = []
     buffer_chars = 0
 
-    with open(path, encoding="utf-8", errors="replace") as handle:
+    with _open_source(path) as handle:
         for raw_line in handle:
             stripped = raw_line.strip()
             # Drop blank lines and replacement-char-only garbage.
