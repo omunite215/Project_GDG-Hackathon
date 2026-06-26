@@ -1,0 +1,12 @@
+#!/bin/sh
+# Pre-commit hook: ruff must be clean before any commit.
+# Installed via: git config core.hooksPath scripts/hooks
+set -e
+
+echo "pre-commit: ruff check ."
+ruff check .
+
+echo "pre-commit: ruff format --check ."
+ruff format --check .
+
+echo "pre-commit: OK"
