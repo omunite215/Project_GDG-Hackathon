@@ -4,4 +4,4 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
-rawlog-triage @args
+triage-logs @args

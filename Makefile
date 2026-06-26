@@ -22,7 +22,7 @@ test:
 
 # Run the pipeline (pass a log file): make run ARGS=data/sample.log
 run:
-	rawlog-triage $(ARGS)
+	triage-logs $(ARGS)
 
 # Install the git hook only.
 hook:

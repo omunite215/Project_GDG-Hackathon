@@ -16,7 +16,7 @@ single anomalous/fatal line, and emits a schema-validated JSON object ready for 
 ```
 ./scripts/setup.ps1          # venv + install + git hook   (make setup)
 ollama pull gemma3:4b        # dev model (required before triage)
-rawlog-triage data/sample.log
+triage-logs data/sample.log
 ```
 
 ## Docs

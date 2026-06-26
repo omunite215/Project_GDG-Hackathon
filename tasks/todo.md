@@ -57,10 +57,13 @@ Check items off as they complete; add a review section at the end of each phase.
 - [x] ruff clean · pytest green · commit + push
 
 ## Phase 6 — Eval (Group A)
-- [ ] `eval/golden.jsonl`: 10–20 hand-labelled Loghub lines (expected severity + key fields)
-- [ ] `eval/run_eval.py` reports JSON-valid %, correct-line %, severity accuracy (the demo slide)
-- [ ] Compare `gemma3:4b` vs `gemma3:12b` on the golden set (if time allows)
-- [ ] Record results · ruff clean · pytest green · commit + push
+- [x] `eval/golden.jsonl`: 10 hand-labelled cases (INFO→FATAL + 2 no-incident + buried-fatal). Starter set — expand with real Loghub lines.
+- [x] `eval/run_eval.py` reports JSON-valid %, detection %, severity accuracy (the demo slide)
+- [ ] Compare `gemma3:4b` vs `gemma3:12b` on the golden set — pending `ollama pull gemma3:12b` (~8 GB); `--model` flag ready
+- [x] Record results (`gemma3:4b`): **JSON-valid 10/10 (100%) · detection 10/10 (100%) · severity 7/8 (88%)** · ruff clean · pytest 21 green · commit + push
+
+> Eval data note: the golden set is realistic-but-synthetic. Group B's `data/sample_production_logs.txt`
+> (real Loghub ~500KB) still needs committing to expand the set and run end-to-end on real data.
 
 ## Phase 7 — Demo
 - [ ] Demo script / README usage walkthrough (one command, end-to-end)

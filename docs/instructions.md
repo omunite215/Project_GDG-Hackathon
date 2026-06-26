@@ -43,13 +43,14 @@ ruff must be clean before every commit — the pre-commit hook enforces this.
 ```
 
 ## Run the pipeline
-> Phase 0 prints a placeholder. Real ingest → triage → emit wiring lands in later phases.
+Emit the triage JSON for a log file (needs Ollama running + `ollama pull gemma3:4b`):
 ```
-./scripts/run.ps1 data/sample.log        |   make run
+./scripts/run.ps1 data/sample.log        |   make run ARGS=data/sample.log
 # or via the console script:
-rawlog-triage data/sample.log
-# or via stdin:
-Get-Content data/sample.log | rawlog-triage
+triage-logs data/sample.log
+# or pipe via stdin, or POST the result to a webhook:
+Get-Content data/sample.log | triage-logs
+triage-logs data/sample.log --target https://hooks.example.com/incident
 ```
 
 ## Git / GitHub
