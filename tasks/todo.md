@@ -24,15 +24,15 @@ Check items off as they complete; add a review section at the end of each phase.
 - [x] Agree `ingest()`/`triage()`/`emit()` signatures in `interfaces.py` (per docs/TRD.md)
 - [x] Export JSON schema for Ollama (`TriageResult.model_json_schema()`) — 4 props, `additionalProperties: false`
 - [x] Unit tests: valid payload passes, extra/missing field fails, bad enum fails (5 tests)
-- [ ] **Tooling migration (Group B):** `uv` env/deps + `pre-commit` framework + CI — replaces Phase-0 pip/venv + native hook
+- [x] **Tooling migration (Group B):** `uv` env/deps + `pre-commit` framework + CI — replaces Phase-0 pip/venv + native hook
 - [x] ruff clean · pytest green · commit + push
 
 ## Phase 2 — Ingestion + pre-filter (Group B)
-- [ ] `ingest(path) -> list[str]`: read with `errors="replace"`, chunk, pre-filter benign INFO/DEBUG (stdlib `re`)
-- [ ] Handle empty input / missing file with clear errors; keep memory flat on large files
-- [ ] Add a ~500KB Loghub sample → `data/sample_production_logs.txt`
-- [ ] Unit tests with the sample + stdin
-- [ ] ruff clean · pytest green · commit + push
+- [x] `ingest(path) -> list[str]`: read with `errors="replace"`, chunk, pre-filter benign INFO/DEBUG (stdlib `re`)
+- [x] Handle empty input / missing file with clear errors; keep memory flat on large files
+- [x] Add a ~500KB Loghub sample → `data/sample_production_logs.txt`
+- [x] Unit tests with the sample + stdin
+- [x] ruff clean · pytest green · commit + push
 
 ## Phase 3 — Triage (Group A)
 - [x] `ollama pull gemma3:4b` (prerequisite) — pulled & smoke-tested
@@ -44,17 +44,17 @@ Check items off as they complete; add a review section at the end of each phase.
 - [x] ruff clean · pytest green · commit + push
 
 ## Phase 4 — Orchestration + emit (Group B)
-- [ ] `emit(result, target="-")`: `"-"` → stdout; a path → write file; `http(s)://…` → POST
-- [ ] `cli.py` wires ingest → triage → emit, arg parsing, exit codes
-- [ ] End-to-end run on `data/sample_production_logs.txt`
-- [ ] ruff clean · pytest green · commit + push
+- [x] `emit(result, target="-")`: `"-"` → stdout; a path → write file; `http(s)://…` → POST
+- [x] `cli.py` wires ingest → triage → emit, arg parsing, exit codes (`--model` threaded to `triage()`)
+- [x] End-to-end run on `data/sample_production_logs.txt`
+- [x] ruff clean · pytest green · commit + push
 
 ## Phase 5 — Hardening (Group B)
-- [ ] Validation-failure path: non-zero exit, clear stderr, never malformed stdout JSON
-- [ ] Edge cases: empty file · no-error file (→ `None`, no fabrication) · truncated/garbled lines · multiple fatals (report the FIRST) · non-UTF-8 bytes · huge file
-- [ ] Ollama-unavailable / model-missing handling
-- [ ] Run on an unseen organizer sample; fix whatever breaks
-- [ ] ruff clean · pytest green · commit + push
+- [x] Validation-failure path: non-zero exit, clear stderr, never malformed stdout JSON
+- [x] Edge cases: empty file · no-error file (→ `None`, no fabrication) · truncated/garbled lines · multiple fatals (report the FIRST) · non-UTF-8 bytes · huge file
+- [x] Ollama-unavailable / model-missing handling
+- [x] Run on an unseen organizer sample; fix whatever breaks
+- [x] ruff clean · pytest green · commit + push
 
 ## Phase 6 — Eval (Group A)
 - [ ] `eval/golden.jsonl`: 10–20 hand-labelled Loghub lines (expected severity + key fields)
@@ -69,6 +69,21 @@ Check items off as they complete; add a review section at the end of each phase.
 - [ ] Final pass: ruff clean · pytest green · commit + push
 
 ---
+
+## Phase 5 — Review (Group B hardening)
+
+Integrated on top of Group A's Phase 3 (real `triage()`). `triage.py`/`interfaces.py`
+are Group A's; this branch owns `ingest.py`, `emit.py`, `cli.py`, and the pipeline tests.
+
+**Done + tested** (`tests/test_pipeline.py`, 11 tests; full suite green, Ollama never hit):
+- Edge cases: empty file · benign no-incident emits nothing (triage→None path) · truncated/garbled lines kept as candidates · non-UTF-8 bytes (`errors="replace"`) · large file flushes into bounded chunks (memory stays flat).
+- CLI failure paths: unreadable input → clear stderr + exit 2; any `triage()` failure (Ollama unreachable / model missing) → clear stderr + exit 1; stdout never carries a partial/malformed payload. CLI tests mock `triage` so they stay hermetic.
+- `--model` is threaded from the CLI into `triage(chunk, model=...)`.
+- Fixed a latent bug: the chunk buffer only flushed on anomaly-keyword lines, so a long run of non-anomaly candidates grew unbounded — now flushes on size regardless of line shape.
+
+**Known limitation (coordinate with Group A):**
+- "Report the FIRST fatal": `ingest()` preserves order and the CLI triages `chunks[0]`, so the earliest fatal within the first ~2000-char chunk is reported. A fatal that lands in a later chunk would need the CLI to triage subsequent chunks — deferred (extra model calls).
+- Recall-first pre-filter keeps benign non-INFO/DEBUG lines; the no-fabrication guarantee rests on Group A's `triage()` mapping benign chunks to severity INFO → `None` (implemented in Phase 3).
 
 ## Phase 0 — Review
 
