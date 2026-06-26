@@ -19,13 +19,13 @@ Check items off as they complete; add a review section at the end of each phase.
 - [x] Commit + push to `origin/main`
 
 ## Phase 1 — Schema & contract
-- [ ] Define `TriageResult` Pydantic v2 model (4 fields exactly) in `schema.py` — **Group A publishes FIRST**
-- [ ] Severity values `INFO`/`WARNING`/`ERROR`/`FATAL`; add `Field(description=...)` to every field
-- [ ] Agree `ingest()`/`triage()`/`emit()` signatures in `interfaces.py` (per docs/TRD.md)
-- [ ] Export JSON schema for Ollama (`TriageResult.model_json_schema()`)
-- [ ] Unit tests: valid payload passes, extra/missing field fails, bad enum fails
+- [x] Define `TriageResult` Pydantic v2 model (4 fields exactly) in `schema.py` — **Group A publishes FIRST**
+- [x] Severity values `INFO`/`WARNING`/`ERROR`/`FATAL`; add `Field(description=...)` to every field
+- [x] Agree `ingest()`/`triage()`/`emit()` signatures in `interfaces.py` (per docs/TRD.md)
+- [x] Export JSON schema for Ollama (`TriageResult.model_json_schema()`) — 4 props, `additionalProperties: false`
+- [x] Unit tests: valid payload passes, extra/missing field fails, bad enum fails (5 tests)
 - [ ] **Tooling migration (Group B):** `uv` env/deps + `pre-commit` framework + CI — replaces Phase-0 pip/venv + native hook
-- [ ] ruff clean · pytest green · commit + push
+- [x] ruff clean · pytest green · commit + push
 
 ## Phase 2 — Ingestion + pre-filter (Group B)
 - [ ] `ingest(path) -> list[str]`: read with `errors="replace"`, chunk, pre-filter benign INFO/DEBUG (stdlib `re`)
