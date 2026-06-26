@@ -17,7 +17,7 @@ dev = [
 ]
 
 [project.scripts]
-rawlog-triage = "rawlog_triage.cli:main"
+triage-logs = "rawlog_triage.cli:main"
 
 [build-system]
 requires = ["hatchling"]
