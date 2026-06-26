@@ -9,4 +9,8 @@ Format: each entry = **what went wrong → the rule**. Add a matching one-line g
 4. **Almost split work as "AI part vs Gemma part" — a false split** (Gemma *is* the AI). → **Rule:** divide along the pipeline (data → model → emit) and keep the AI/ML person on the prompt/schema/eval core.
 
 ## Session lessons
-- _<append here: date — what went wrong — the rule>_
+- **2026-06-26 — `OLLAMA_HOST=0.0.0.0:11434` broke the Python `ollama` client.** The `ollama` CLI
+  and `curl http://127.0.0.1:11434` worked, but the Python client reads `OLLAMA_HOST` and tried to
+  *connect* to `0.0.0.0` (a server *bind* address, not a connectable target) → `ConnectionError`.
+  → **Rule:** create the client via a resolver that rewrites `0.0.0.0`/empty → `127.0.0.1` while
+  still honoring a real remote `OLLAMA_HOST` (Group B → Group A's GPU). See `triage._client()`.

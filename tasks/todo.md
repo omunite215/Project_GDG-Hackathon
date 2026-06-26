@@ -35,12 +35,13 @@ Check items off as they complete; add a review section at the end of each phase.
 - [ ] ruff clean · pytest green · commit + push
 
 ## Phase 3 — Triage (Group A)
-- [ ] `ollama pull gemma3:4b` (prerequisite)
-- [ ] `triage(chunk) -> TriageResult | None` via `ollama.chat(..., format=TriageResult.model_json_schema(), options={"temperature": 0})`
-- [ ] Return `None` when there is no real error (do NOT fabricate); bounded 1-retry on `ValidationError`, then a typed "unparseable" result
-- [ ] System prompt that isolates the single most severe anomalous/fatal event
-- [ ] Tests (mock Ollama client) for parse / validate / None paths
-- [ ] ruff clean · pytest green · commit + push
+- [x] `ollama pull gemma3:4b` (prerequisite) — pulled & smoke-tested
+- [x] `triage(chunk, model="gemma3:4b") -> TriageResult | None` via `ollama` client (`format=TriageResult.model_json_schema()`, `options={"temperature": 0}`)
+- [x] Return `None` when there is no real error (severity INFO → None; no fabrication); bounded 1-retry on `ValidationError`, then a typed "unparseable" result
+- [x] System prompt that isolates the single most severe anomalous/fatal event
+- [x] Tests (mock Ollama client) for parse / validate / None / unparseable paths (4 tests)
+- [x] Live self-check (`python -m rawlog_triage.triage`) returns a valid FATAL TriageResult on the sample
+- [x] ruff clean · pytest green · commit + push
 
 ## Phase 4 — Orchestration + emit (Group B)
 - [ ] `emit(result, target="-")`: `"-"` → stdout; a path → write file; `http(s)://…` → POST

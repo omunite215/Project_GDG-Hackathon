@@ -15,7 +15,7 @@ def ingest(path: str) -> list[str]:
     ...
 
 
-def triage(chunk: str) -> TriageResult | None:
+def triage(chunk: str, model: str = "gemma3:4b") -> TriageResult | None:
     """Gemma structured-output call. Returns None when the chunk has no real error."""
     ...
 

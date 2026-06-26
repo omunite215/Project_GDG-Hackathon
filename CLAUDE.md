@@ -57,4 +57,5 @@ We use a new chat per phase to save tokens; graphify makes that cheap by turning
 - Classify the task first: inference vs training. This is **inference** — the GPU only speeds inference.
 - Prefer Ollama structured outputs over prompt-only "return JSON"; the latter is unreliable and slower.
 - Scope to the actual track (log triage); don't build features the rubric doesn't ask for.
+- Connect the Ollama client via a host resolver: `0.0.0.0`/empty `OLLAMA_HOST` → `127.0.0.1` (can't dial a bind address), but honor a real remote host.
 - _<add new guards here as mistakes happen>_
