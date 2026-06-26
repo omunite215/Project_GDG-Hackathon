@@ -1,3 +1,4 @@
+import io
 import json
 
 from rawlog_triage import cli
@@ -75,6 +76,12 @@ def test_ingest_chunks_large_file_keeping_memory_bounded(tmp_path) -> None:
     assert len(chunks) > 1  # proves the buffer flushed before EOF
     assert all(len(c) <= CHUNK_MAX_CHARS + 64 for c in chunks)  # each stays bounded
     assert sum(c.count("\n") + 1 for c in chunks) == 400  # no lines lost
+
+
+def test_ingest_reads_from_stdin(monkeypatch) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO("INFO boot completed\nERROR disk full\n"))
+
+    assert ingest("-") == ["ERROR disk full"]
 
 
 # --- emit -------------------------------------------------------------------
@@ -182,3 +189,28 @@ def test_cli_triage_failure_exits_nonzero(tmp_path, capsys, monkeypatch) -> None
     assert code == EXIT_RUNTIME
     assert captured.out == ""
     assert "triage failed" in captured.err
+
+
+def test_cli_reads_from_stdin_end_to_end(capsys, monkeypatch) -> None:
+    # `cat log | triage-logs` — no positional arg, input defaults to '-' (stdin).
+    monkeypatch.setattr("sys.stdin", io.StringIO("INFO boot\nFATAL pool exhausted\n"))
+    incident = TriageResult(
+        service_name="auth-service",
+        timestamp="",
+        error_severity="FATAL",
+        suggested_remediation="Increase the DB connection pool.",
+    )
+    seen: dict[str, object] = {}
+
+    def fake_triage(chunk, model="gemma3:4b"):
+        seen["chunk"] = chunk
+        return incident
+
+    monkeypatch.setattr(cli, "triage", fake_triage)
+
+    code = main([])  # no args → read stdin
+
+    out = capsys.readouterr().out
+    assert code == EXIT_OK
+    assert json.loads(out)["error_severity"] == "FATAL"
+    assert seen["chunk"] == "FATAL pool exhausted"  # INFO dropped, FATAL kept

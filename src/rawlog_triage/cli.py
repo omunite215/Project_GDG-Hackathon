@@ -19,7 +19,12 @@ EXIT_INPUT = 2
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="triage-logs")
-    parser.add_argument("input", help="Path to the raw log file to inspect")
+    parser.add_argument(
+        "input",
+        nargs="?",
+        default="-",
+        help="Path to the raw log file, or '-' / omitted to read from stdin",
+    )
     parser.add_argument(
         "--target",
         default="-",
